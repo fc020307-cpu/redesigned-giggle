@@ -6,11 +6,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import re
-import dns.resolver
-import smtplib
-import socket
 import csv
 import io
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
@@ -26,6 +24,10 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+# Abstract API configuration
+ABSTRACT_API_KEY = os.environ.get('ABSTRACT_API_KEY', '')
+ABSTRACT_API_URL = "https://emailvalidation.abstractapi.com/v1"
+
 # Create the main app without a prefix
 app = FastAPI()
 
@@ -38,15 +40,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Disposable email domains list
-DISPOSABLE_DOMAINS = {
-    "tempmail.com", "throwaway.email", "guerrillamail.com", "mailinator.com",
-    "10minutemail.com", "temp-mail.org", "fakeinbox.com", "trashmail.com",
-    "getnada.com", "mohmal.com", "maildrop.cc", "yopmail.com", "dispostable.com",
-    "sharklasers.com", "spam4.me", "grr.la", "guerrillamailblock.com",
-    "tempail.com", "tmpmail.org", "tmpeml.com", "emailondeck.com"
-}
 
 # Enums
 class EmailStatus(str, Enum):
@@ -69,8 +62,11 @@ class EmailResult(BaseModel):
     format_valid: bool
     domain_valid: bool
     mx_valid: bool
-    is_disposable: bool
     smtp_valid: Optional[bool] = None
+    is_disposable: bool
+    is_free_email: bool = False
+    is_catchall: bool = False
+    quality_score: float = 0.0
     reason: str
 
 class ValidationJob(BaseModel):
@@ -96,215 +92,138 @@ def validate_email_format(email: str) -> bool:
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(pattern, email.strip().lower()))
 
-def extract_domain(email: str) -> Optional[str]:
-    """Extract domain from email"""
+async def validate_with_abstract_api(email: str) -> Optional[dict]:
+    """Validate email using Abstract API for accurate results"""
+    if not ABSTRACT_API_KEY:
+        logger.warning("Abstract API key not configured")
+        return None
+    
     try:
-        return email.strip().lower().split('@')[1]
-    except IndexError:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                ABSTRACT_API_URL,
+                params={
+                    "api_key": ABSTRACT_API_KEY,
+                    "email": email
+                }
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 429:
+                logger.warning("Abstract API rate limit exceeded")
+                return None
+            else:
+                logger.error(f"Abstract API error: {response.status_code}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Abstract API request failed: {str(e)}")
         return None
 
-def validate_domain(domain: str) -> bool:
-    """Check if domain exists"""
-    try:
-        socket.gethostbyname(domain)
-        return True
-    except socket.gaierror:
-        return False
-
-def get_mx_records(domain: str) -> List[str]:
-    """Get MX records for domain"""
-    try:
-        records = dns.resolver.resolve(domain, 'MX')
-        return [str(record.exchange).rstrip('.') for record in records]
-    except Exception:
-        return []
-
-def is_disposable_email(domain: str) -> bool:
-    """Check if email domain is disposable"""
-    return domain.lower() in DISPOSABLE_DOMAINS
-
-def verify_smtp(email: str, mx_host: str, timeout: int = 10) -> tuple[Optional[bool], str]:
-    """
-    Verify email via SMTP - returns (status, detail)
-    - (True, reason) if valid
-    - (False, reason) if definitely invalid
-    - (None, reason) if uncertain
-    """
-    try:
-        smtp = smtplib.SMTP(timeout=timeout)
-        smtp.connect(mx_host)
-        smtp.helo('verify.local')
-        smtp.mail('noreply@verify.local')
-        code, message = smtp.rcpt(email)
-        smtp.quit()
-        
-        message_str = message.decode() if isinstance(message, bytes) else str(message)
-        
-        # 250 = OK, mailbox exists
-        if code == 250:
-            return True, "Mailbox exists"
-        
-        # 550 = Mailbox not found (but some servers always return this)
-        # 551 = User not local
-        # 552 = Mailbox full
-        # 553 = Mailbox name not allowed
-        # 554 = Transaction failed
-        elif code in [550, 551, 553]:
-            return False, f"Mailbox rejected (code {code})"
-        
-        # 552 = Mailbox full - still valid but full
-        elif code == 552:
-            return True, "Mailbox exists but full"
-        
-        # 450, 451, 452 = Temporary failures - treat as uncertain
-        elif code in [450, 451, 452]:
-            return None, "Temporary server error"
-        
-        # Other codes - uncertain
+def parse_abstract_api_response(email: str, api_result: dict) -> EmailResult:
+    """Parse Abstract API response into our EmailResult format"""
+    deliverability = api_result.get("deliverability", "UNKNOWN")
+    quality_score = api_result.get("quality_score", 0) or 0
+    
+    # Extract boolean fields safely
+    is_valid_format = api_result.get("is_valid_format", {})
+    format_valid = is_valid_format.get("value", False) if isinstance(is_valid_format, dict) else bool(is_valid_format)
+    
+    is_mx_found = api_result.get("is_mx_found", {})
+    mx_valid = is_mx_found.get("value", False) if isinstance(is_mx_found, dict) else bool(is_mx_found)
+    
+    is_smtp_valid = api_result.get("is_smtp_valid", {})
+    smtp_valid = is_smtp_valid.get("value", None) if isinstance(is_smtp_valid, dict) else is_smtp_valid
+    
+    is_disposable = api_result.get("is_disposable_email", {})
+    disposable = is_disposable.get("value", False) if isinstance(is_disposable, dict) else bool(is_disposable)
+    
+    is_free = api_result.get("is_free_email", {})
+    free_email = is_free.get("value", False) if isinstance(is_free, dict) else bool(is_free)
+    
+    is_catchall = api_result.get("is_catchall_email", {})
+    catchall = is_catchall.get("value", False) if isinstance(is_catchall, dict) else bool(is_catchall)
+    
+    # Determine status based on deliverability
+    if deliverability == "DELIVERABLE":
+        if disposable:
+            status = EmailStatus.RISKY
+            reason = "Disposable/temporary email - deliverable but risky"
+        elif catchall:
+            status = EmailStatus.RISKY
+            reason = "Catch-all domain - cannot confirm mailbox exists"
         else:
-            return None, f"Uncertain response (code {code})"
-            
-    except smtplib.SMTPServerDisconnected:
-        return None, "Server disconnected (anti-spam)"
-    except smtplib.SMTPConnectError:
-        return None, "Could not connect to mail server"
-    except socket.timeout:
-        return None, "Connection timeout"
-    except Exception as e:
-        logger.warning(f"SMTP verification failed for {email}: {str(e)}")
-        return None, str(e)
+            status = EmailStatus.VALID
+            reason = "Email verified - deliverable"
+    elif deliverability == "UNDELIVERABLE":
+        status = EmailStatus.INVALID
+        reason = "Email undeliverable - mailbox does not exist"
+    elif deliverability == "RISKY":
+        status = EmailStatus.RISKY
+        reason = "Risky email - may have deliverability issues"
+    else:  # UNKNOWN
+        if quality_score >= 0.7:
+            status = EmailStatus.RISKY
+            reason = "Could not fully verify - likely valid based on quality score"
+        else:
+            status = EmailStatus.UNKNOWN
+            reason = "Could not determine email validity"
+    
+    return EmailResult(
+        email=email,
+        status=status,
+        format_valid=format_valid,
+        domain_valid=mx_valid,  # If MX exists, domain is valid
+        mx_valid=mx_valid,
+        smtp_valid=smtp_valid,
+        is_disposable=disposable,
+        is_free_email=free_email,
+        is_catchall=catchall,
+        quality_score=quality_score,
+        reason=reason
+    )
 
-def check_catch_all(mx_host: str, domain: str) -> bool:
-    """Check if domain accepts all emails (catch-all)"""
-    random_email = f"nonexistent_test_xyz_123@{domain}"
-    result, _ = verify_smtp(random_email, mx_host)
-    return result is True
-
-# Known major providers that block SMTP verification
-PROTECTED_DOMAINS = {
-    'gmail.com', 'googlemail.com', 'google.com',
-    'yahoo.com', 'yahoo.co.uk', 'yahoo.fr', 'yahoo.de',
-    'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
-    'icloud.com', 'me.com', 'mac.com',
-    'aol.com', 'protonmail.com', 'proton.me',
-    'zoho.com', 'fastmail.com', 'tutanota.com',
-    'comcast.net', 'verizon.net', 'att.net', 'sbcglobal.net'
-}
-
-def validate_single_email(email: str) -> EmailResult:
-    """Perform full validation on a single email"""
+async def validate_single_email(email: str) -> EmailResult:
+    """Perform full validation on a single email using Abstract API"""
     email = email.strip().lower()
     
-    # Format validation
-    format_valid = validate_email_format(email)
-    if not format_valid:
+    # Basic format check first
+    if not validate_email_format(email):
         return EmailResult(
             email=email,
             status=EmailStatus.INVALID,
             format_valid=False,
             domain_valid=False,
             mx_valid=False,
-            is_disposable=False,
             smtp_valid=None,
+            is_disposable=False,
+            is_free_email=False,
+            is_catchall=False,
+            quality_score=0.0,
             reason="Invalid email format"
         )
     
-    # Domain extraction
-    domain = extract_domain(email)
-    if not domain:
-        return EmailResult(
-            email=email,
-            status=EmailStatus.INVALID,
-            format_valid=True,
-            domain_valid=False,
-            mx_valid=False,
-            is_disposable=False,
-            smtp_valid=None,
-            reason="Could not extract domain"
-        )
+    # Use Abstract API for accurate validation
+    api_result = await validate_with_abstract_api(email)
     
-    # Domain validation
-    domain_valid = validate_domain(domain)
-    if not domain_valid:
-        return EmailResult(
-            email=email,
-            status=EmailStatus.INVALID,
-            format_valid=True,
-            domain_valid=False,
-            mx_valid=False,
-            is_disposable=False,
-            smtp_valid=None,
-            reason="Domain does not exist"
-        )
-    
-    # Disposable check
-    is_disposable = is_disposable_email(domain)
-    
-    # MX record check
-    mx_records = get_mx_records(domain)
-    mx_valid = len(mx_records) > 0
-    
-    if not mx_valid:
-        return EmailResult(
-            email=email,
-            status=EmailStatus.INVALID,
-            format_valid=True,
-            domain_valid=True,
-            mx_valid=False,
-            is_disposable=is_disposable,
-            smtp_valid=None,
-            reason="No MX records found - domain cannot receive email"
-        )
-    
-    # Check if it's a protected major provider (skip SMTP check)
-    is_protected_domain = domain in PROTECTED_DOMAINS
-    
-    # SMTP verification (skip for protected domains)
-    smtp_valid = None
-    smtp_reason = ""
-    
-    if is_protected_domain:
-        # For Gmail, Outlook, etc. - trust the MX records
-        smtp_valid = None
-        smtp_reason = "Major provider (SMTP check skipped)"
-    elif mx_records:
-        for mx_host in mx_records[:2]:  # Try first 2 MX records
-            smtp_valid, smtp_reason = verify_smtp(email, mx_host)
-            if smtp_valid is not None:
-                break
-    
-    # Determine final status with improved logic
-    if is_disposable:
-        status = EmailStatus.RISKY
-        reason = "Disposable/temporary email address"
-    elif smtp_valid is False:
-        status = EmailStatus.INVALID
-        reason = f"Mailbox rejected: {smtp_reason}"
-    elif smtp_valid is True:
-        status = EmailStatus.VALID
-        reason = "Email verified - mailbox exists"
-    elif is_protected_domain and mx_valid:
-        # Major providers with valid MX - likely valid
-        status = EmailStatus.VALID
-        reason = f"Valid format & MX records ({domain} blocks SMTP verification)"
-    elif smtp_valid is None and mx_valid:
-        # Has MX but couldn't verify - likely valid but uncertain
-        status = EmailStatus.RISKY  
-        reason = f"Could not verify mailbox: {smtp_reason}"
+    if api_result:
+        return parse_abstract_api_response(email, api_result)
     else:
-        status = EmailStatus.UNKNOWN
-        reason = "Could not determine email validity"
-    
-    return EmailResult(
-        email=email,
-        status=status,
-        format_valid=True,
-        domain_valid=True,
-        mx_valid=mx_valid,
-        is_disposable=is_disposable,
-        smtp_valid=smtp_valid,
-        reason=reason
-    )
+        # Fallback: return unknown if API unavailable
+        return EmailResult(
+            email=email,
+            status=EmailStatus.UNKNOWN,
+            format_valid=True,
+            domain_valid=False,
+            mx_valid=False,
+            smtp_valid=None,
+            is_disposable=False,
+            is_free_email=False,
+            is_catchall=False,
+            quality_score=0.0,
+            reason="Could not validate - API unavailable. Please check API key."
+        )
 
 async def process_validation_job(job_id: str, emails: List[str]):
     """Background task to process email validation"""
@@ -322,7 +241,7 @@ async def process_validation_job(job_id: str, emails: List[str]):
         unknown_count = 0
         
         for i, email in enumerate(emails):
-            result = validate_single_email(email)
+            result = await validate_single_email(email)
             results.append(result.model_dump())
             
             # Update counts
@@ -335,8 +254,8 @@ async def process_validation_job(job_id: str, emails: List[str]):
             else:
                 unknown_count += 1
             
-            # Update progress every 10 emails
-            if (i + 1) % 10 == 0 or i == len(emails) - 1:
+            # Update progress every 5 emails or at the end
+            if (i + 1) % 5 == 0 or i == len(emails) - 1:
                 await db.validation_jobs.update_one(
                     {"id": job_id},
                     {"$set": {
@@ -374,7 +293,7 @@ async def root():
 @api_router.post("/validate/single")
 async def validate_single(email: str):
     """Validate a single email address"""
-    result = validate_single_email(email)
+    result = await validate_single_email(email)
     return result.model_dump()
 
 @api_router.post("/validate/bulk")
@@ -480,17 +399,19 @@ async def export_job_results(job_id: str, status_filter: Optional[str] = None):
     # Create CSV
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['Email', 'Status', 'Format Valid', 'Domain Valid', 'MX Valid', 'Disposable', 'SMTP Valid', 'Reason'])
+    writer.writerow(['Email', 'Status', 'Quality Score', 'Format Valid', 'MX Valid', 'SMTP Valid', 'Disposable', 'Free Email', 'Catch-all', 'Reason'])
     
     for result in results:
         writer.writerow([
             result['email'],
             result['status'],
+            result.get('quality_score', 0),
             result['format_valid'],
-            result['domain_valid'],
             result['mx_valid'],
+            result.get('smtp_valid', ''),
             result['is_disposable'],
-            result['smtp_valid'],
+            result.get('is_free_email', False),
+            result.get('is_catchall', False),
             result['reason']
         ])
     
