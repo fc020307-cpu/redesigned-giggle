@@ -1,0 +1,152 @@
+{
+  "identity": {
+    "name": "E1",
+    "role": "Anti-AI Designer",
+    "principles": [
+      "Fusion over Imitation",
+      "Emotion First",
+      "Content is King",
+      "Zoom In",
+      "Negative Space",
+      "Contrast"
+    ]
+  },
+  "project": {
+    "name": "Bulk Email Validator",
+    "type": "SaaS Dashboard",
+    "theme": "Light (Primary) / Dark (Secondary)",
+    "archetype": "Swiss & High-Contrast",
+    "emotional_tone": "Professional, Efficient, Trustworthy, Precise"
+  },
+  "typography": {
+    "headings": {
+      "font_family": "Manrope, sans-serif",
+      "weights": ["600", "700", "800"],
+      "usage": "Main headings, section titles, hero text"
+    },
+    "body": {
+      "font_family": "IBM Plex Sans, sans-serif",
+      "weights": ["400", "500"],
+      "usage": "Paragraphs, data tables, inputs, labels"
+    },
+    "mono": {
+      "font_family": "JetBrains Mono, monospace",
+      "usage": "Email addresses, API keys, code snippets"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "name": "Indigo Trust",
+        "hex": "#4F46E5",
+        "tailwind": "indigo-600"
+      },
+      "background": {
+        "light": "#FFFFFF",
+        "subtle": "#F8FAFC",
+        "dark": "#0F172A"
+      },
+      "status": {
+        "valid": "#10B981",
+        "invalid": "#F43F5E",
+        "risky": "#F59E0B",
+        "unknown": "#64748B"
+      },
+      "text": {
+        "primary": "#0F172A",
+        "secondary": "#475569",
+        "muted": "#94A3B8"
+      }
+    },
+    "gradients": {
+      "hero_glow": "radial-gradient(circle at 50% 50%, rgba(79, 70, 229, 0.15) 0%, rgba(255, 255, 255, 0) 70%)"
+    }
+  },
+  "layout": {
+    "spacing_scale": ["p-1", "p-2", "p-4", "p-6", "p-8", "p-12", "p-16", "p-24", "p-32"],
+    "container_padding": "px-6 md:px-12 lg:px-24",
+    "grid_system": {
+      "dashboard": "grid-cols-1 md:grid-cols-12 gap-6",
+      "features": "grid-cols-1 md:grid-cols-3 gap-8"
+    },
+    "modes": {
+      "landing": "Mode A: Tetris Grid (Asymmetry)",
+      "dashboard": "Mode B: High Density Grid"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm hover:shadow-md transition-all duration-200",
+      "secondary": "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 rounded-lg transition-all duration-200",
+      "ghost": "text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-lg"
+    },
+    "cards": {
+      "style": "bg-white border border-slate-100 shadow-sm rounded-xl hover:shadow-md transition-shadow duration-300",
+      "dashboard_metric": "p-6 flex flex-col justify-between h-full"
+    },
+    "inputs": {
+      "style": "bg-white border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 rounded-lg h-10 px-3"
+    },
+    "tables": {
+      "style": "w-full text-sm text-left",
+      "header": "bg-slate-50 text-slate-500 font-medium uppercase tracking-wider",
+      "row": "border-b border-slate-100 hover:bg-slate-50/50 transition-colors"
+    }
+  },
+  "visual_enhancers": {
+    "tracing_beam": "Use for the main upload area to signal 'active' state.",
+    "glassmorphism": "Use for sticky headers and floating action bars (backdrop-blur-xl bg-white/80).",
+    "noise_texture": "Subtle grain overlay on the landing page background to reduce digital flatness.",
+    "micro_interactions": "Hover lift on cards (-translate-y-1), smooth color transitions on buttons."
+  },
+  "images": {
+    "hero_background": {
+      "url": "https://images.unsplash.com/photo-1765046255517-412341954c4c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRhdGElMjBmbG93JTIwdGVjaG5vbG9neSUyMGNsZWFuJTIwd2hpdGUlMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc2ODc3OTU3MHww&ixlib=rb-4.1.0&q=85",
+      "description": "Abstract white wavy surface with grid pattern",
+      "usage": "Hero section background with low opacity overlay"
+    },
+    "about_section": {
+      "url": "https://images.unsplash.com/photo-1764755932155-dabbee87df7e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NjZ8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBvZmZpY2UlMjB3b3Jrc3BhY2UlMjBjbGVhbiUyMGRlc2slMjBsYXB0b3B8ZW58MHx8fHwxNzY4Nzc5NTcyfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Minimal modern workspace",
+      "usage": "Features or About section to imply productivity"
+    }
+  },
+  "icons": {
+    "library": "lucide-react",
+    "style": "Stroke width 1.5px, size 20px or 24px"
+  },
+  "motion": {
+    "library": "framer-motion",
+    "transitions": "type: 'spring', stiffness: 300, damping: 30",
+    "page_load": "opacity: 0 -> 1, y: 20 -> 0 (staggered children)"
+  },
+  "accessibility": {
+    "contrast": "Ensure text meets APCA standards. Use slate-600+ for text on white.",
+    "focus_states": "Visible ring-2 ring-indigo-500 ring-offset-2",
+    "reduced_motion": "Respect prefers-reduced-motion media query"
+  },
+  "instructions_to_main_agent": [
+    "Implement the 'Swiss & High-Contrast' archetype.",
+    "Use the 'Manrope' font for all headings and 'IBM Plex Sans' for body text.",
+    "Create a 'Tracing Beam' effect for the file upload dropzone.",
+    "Ensure the dashboard grid follows 'Mode B: High Density Grid'.",
+    "Use the provided image URLs for the landing page.",
+    "Do NOT use generic gradients; use the specified 'hero_glow' or solid colors.",
+    "All interactive elements MUST have data-testid attributes.",
+    "Use 'sonner' for all toast notifications.",
+    "Keep the UI clean, professional, and trustworthy."
+  ],
+  "universal_guidelines": [
+    "Avoid 'AI slop' aesthetic (generic centered layouts, uniform styling).",
+    "Create depth through layered design elements (z-index, shadows).",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "Do NOT apply universal transitions (e.g., transition: all).",
+    "Do NOT center align the app container globally.",
+    "Use modern button styles (pill-shaped or sharp).",
+    "Every interaction needs micro-animations.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "Prioritize using pre-existing Shadcn components from src/components/ui.",
+    "Components MUST use named exports.",
+    "Pages MUST use default exports."
+  ]
+}
