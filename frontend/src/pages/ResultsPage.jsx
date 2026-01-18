@@ -412,14 +412,14 @@ export default function ResultsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className={`text-xs px-2 py-0.5 rounded ${result.format_valid ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                 Format
                               </span>
                               <span className={`text-xs px-2 py-0.5 rounded ${result.mx_valid ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                 MX
                               </span>
-                              {result.smtp_valid !== null && (
+                              {result.smtp_valid !== null && result.smtp_valid !== undefined && (
                                 <span className={`text-xs px-2 py-0.5 rounded ${result.smtp_valid ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                   SMTP
                                 </span>
@@ -427,6 +427,16 @@ export default function ResultsPage() {
                               {result.is_disposable && (
                                 <span className="text-xs px-2 py-0.5 rounded bg-amber-50 text-amber-600">
                                   Disposable
+                                </span>
+                              )}
+                              {result.is_catchall && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-amber-50 text-amber-600">
+                                  Catch-all
+                                </span>
+                              )}
+                              {result.quality_score > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-indigo-50 text-indigo-600">
+                                  {Math.round(result.quality_score * 100)}%
                                 </span>
                               )}
                             </div>
