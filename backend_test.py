@@ -66,12 +66,12 @@ class EmailValidatorAPITester:
         
         all_passed = True
         for email, description in test_cases:
+            # Single email validation expects email as query parameter
             success, response = self.run_test(
                 f"Single Email Validation - {description}",
                 "POST",
-                "validate/single",
-                200,
-                data={"email": email}
+                f"validate/single?email={email}",
+                200
             )
             if not success:
                 all_passed = False
