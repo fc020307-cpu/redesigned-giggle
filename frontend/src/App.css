@@ -1,34 +1,93 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* Email Validator App Styles */
+
+/* Dropzone styles */
+.dropzone {
+  @apply relative border-2 border-dashed border-slate-300 rounded-xl p-12 text-center cursor-pointer transition-all duration-300;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+.dropzone:hover {
+  @apply border-indigo-400 bg-indigo-50/50;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+.dropzone.active {
+  @apply border-indigo-500 bg-indigo-50;
 }
 
-.App-link {
-    color: #61dafb;
+.dropzone.active::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 14px;
+  padding: 2px;
+  background: linear-gradient(90deg, #4F46E5, #818CF8, #4F46E5);
+  background-size: 200% 100%;
+  animation: trace 1.5s linear infinite;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  pointer-events: none;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+@keyframes trace {
+  0% { background-position: 200% 0; }
+  100% { background-position: 0% 0; }
+}
+
+/* Progress ring animation */
+@keyframes progress-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.progress-ring {
+  animation: progress-spin 1s linear infinite;
+}
+
+/* Table row hover effect */
+.email-row {
+  @apply transition-colors duration-150;
+}
+
+.email-row:hover {
+  @apply bg-slate-50/80;
+}
+
+/* Card hover lift */
+.metric-card {
+  @apply transition-all duration-300;
+}
+
+.metric-card:hover {
+  @apply -translate-y-1 shadow-md;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.fade-in-delay-1 { animation-delay: 0.1s; opacity: 0; }
+.fade-in-delay-2 { animation-delay: 0.2s; opacity: 0; }
+.fade-in-delay-3 { animation-delay: 0.3s; opacity: 0; }
+.fade-in-delay-4 { animation-delay: 0.4s; opacity: 0; }
+
+/* Pulse animation for processing */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.pulse-soft {
+  animation: pulse-soft 1.5s ease-in-out infinite;
 }
