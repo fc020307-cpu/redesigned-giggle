@@ -174,6 +174,23 @@ def verify_smtp(email: str, mx_host: str, timeout: int = 10) -> tuple[Optional[b
         logger.warning(f"SMTP verification failed for {email}: {str(e)}")
         return None, str(e)
 
+def check_catch_all(mx_host: str, domain: str) -> bool:
+    """Check if domain accepts all emails (catch-all)"""
+    random_email = f"nonexistent_test_xyz_123@{domain}"
+    result, _ = verify_smtp(random_email, mx_host)
+    return result is True
+
+# Known major providers that block SMTP verification
+PROTECTED_DOMAINS = {
+    'gmail.com', 'googlemail.com', 'google.com',
+    'yahoo.com', 'yahoo.co.uk', 'yahoo.fr', 'yahoo.de',
+    'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+    'icloud.com', 'me.com', 'mac.com',
+    'aol.com', 'protonmail.com', 'proton.me',
+    'zoho.com', 'fastmail.com', 'tutanota.com',
+    'comcast.net', 'verizon.net', 'att.net', 'sbcglobal.net'
+}
+
 def validate_single_email(email: str) -> EmailResult:
     """Perform full validation on a single email"""
     email = email.strip().lower()
@@ -236,30 +253,44 @@ def validate_single_email(email: str) -> EmailResult:
             mx_valid=False,
             is_disposable=is_disposable,
             smtp_valid=None,
-            reason="No MX records found"
+            reason="No MX records found - domain cannot receive email"
         )
     
-    # SMTP verification
+    # Check if it's a protected major provider (skip SMTP check)
+    is_protected_domain = domain in PROTECTED_DOMAINS
+    
+    # SMTP verification (skip for protected domains)
     smtp_valid = None
-    if mx_records:
+    smtp_reason = ""
+    
+    if is_protected_domain:
+        # For Gmail, Outlook, etc. - trust the MX records
+        smtp_valid = None
+        smtp_reason = "Major provider (SMTP check skipped)"
+    elif mx_records:
         for mx_host in mx_records[:2]:  # Try first 2 MX records
-            smtp_valid = verify_smtp(email, mx_host)
+            smtp_valid, smtp_reason = verify_smtp(email, mx_host)
             if smtp_valid is not None:
                 break
     
-    # Determine final status
-    if smtp_valid is False:
-        status = EmailStatus.INVALID
-        reason = "Mailbox does not exist"
-    elif is_disposable:
+    # Determine final status with improved logic
+    if is_disposable:
         status = EmailStatus.RISKY
-        reason = "Disposable email address"
+        reason = "Disposable/temporary email address"
+    elif smtp_valid is False:
+        status = EmailStatus.INVALID
+        reason = f"Mailbox rejected: {smtp_reason}"
     elif smtp_valid is True:
         status = EmailStatus.VALID
-        reason = "Email is valid and deliverable"
+        reason = "Email verified - mailbox exists"
+    elif is_protected_domain and mx_valid:
+        # Major providers with valid MX - likely valid
+        status = EmailStatus.VALID
+        reason = f"Valid format & MX records ({domain} blocks SMTP verification)"
     elif smtp_valid is None and mx_valid:
-        status = EmailStatus.RISKY
-        reason = "Could not verify mailbox (server unreachable)"
+        # Has MX but couldn't verify - likely valid but uncertain
+        status = EmailStatus.RISKY  
+        reason = f"Could not verify mailbox: {smtp_reason}"
     else:
         status = EmailStatus.UNKNOWN
         reason = "Could not determine email validity"
