@@ -123,25 +123,56 @@ def is_disposable_email(domain: str) -> bool:
     """Check if email domain is disposable"""
     return domain.lower() in DISPOSABLE_DOMAINS
 
-def verify_smtp(email: str, mx_host: str, timeout: int = 10) -> Optional[bool]:
-    """Verify email via SMTP - returns True if valid, False if invalid, None if unknown"""
+def verify_smtp(email: str, mx_host: str, timeout: int = 10) -> tuple[Optional[bool], str]:
+    """
+    Verify email via SMTP - returns (status, detail)
+    - (True, reason) if valid
+    - (False, reason) if definitely invalid
+    - (None, reason) if uncertain
+    """
     try:
         smtp = smtplib.SMTP(timeout=timeout)
         smtp.connect(mx_host)
         smtp.helo('verify.local')
-        smtp.mail('verify@verify.local')
-        code, _ = smtp.rcpt(email)
+        smtp.mail('noreply@verify.local')
+        code, message = smtp.rcpt(email)
         smtp.quit()
         
+        message_str = message.decode() if isinstance(message, bytes) else str(message)
+        
+        # 250 = OK, mailbox exists
         if code == 250:
-            return True
-        elif code == 550:
-            return False
+            return True, "Mailbox exists"
+        
+        # 550 = Mailbox not found (but some servers always return this)
+        # 551 = User not local
+        # 552 = Mailbox full
+        # 553 = Mailbox name not allowed
+        # 554 = Transaction failed
+        elif code in [550, 551, 553]:
+            return False, f"Mailbox rejected (code {code})"
+        
+        # 552 = Mailbox full - still valid but full
+        elif code == 552:
+            return True, "Mailbox exists but full"
+        
+        # 450, 451, 452 = Temporary failures - treat as uncertain
+        elif code in [450, 451, 452]:
+            return None, "Temporary server error"
+        
+        # Other codes - uncertain
         else:
-            return None
+            return None, f"Uncertain response (code {code})"
+            
+    except smtplib.SMTPServerDisconnected:
+        return None, "Server disconnected (anti-spam)"
+    except smtplib.SMTPConnectError:
+        return None, "Could not connect to mail server"
+    except socket.timeout:
+        return None, "Connection timeout"
     except Exception as e:
         logger.warning(f"SMTP verification failed for {email}: {str(e)}")
-        return None
+        return None, str(e)
 
 def validate_single_email(email: str) -> EmailResult:
     """Perform full validation on a single email"""
