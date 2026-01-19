@@ -361,6 +361,7 @@ def validate_single_email_sync(email: str) -> EmailResult:
     disposable = is_disposable_email(domain)
     role_email = is_role_email(email)
     free_email = is_free_email(domain)
+    is_smtp_blocking = domain in SMTP_BLOCKING_PROVIDERS
     
     # Step 4: Domain validation
     domain_valid, domain_reason = validate_domain(domain)
@@ -398,7 +399,34 @@ def validate_single_email_sync(email: str) -> EmailResult:
             reason=f"Cannot receive email: {mx_reason}"
         )
     
-    # Step 6: SMTP verification (try up to 2 MX servers)
+    # Step 6: For SMTP-blocking providers, skip SMTP check and trust MX
+    if is_smtp_blocking:
+        quality_score = 0.85 if not disposable else 0.4
+        if disposable:
+            status = EmailStatus.RISKY
+            reason = "Disposable/temporary email address"
+        elif role_email:
+            status = EmailStatus.RISKY
+            reason = "Role-based email (valid but may not reach a person)"
+        else:
+            status = EmailStatus.VALID
+            reason = f"Valid email (MX verified - {domain} blocks SMTP checks)"
+        
+        return EmailResult(
+            email=email,
+            status=status,
+            format_valid=True,
+            domain_valid=True,
+            mx_valid=True,
+            smtp_valid=None,
+            is_disposable=disposable,
+            is_role_email=role_email,
+            is_free_email=free_email,
+            quality_score=quality_score,
+            reason=reason
+        )
+    
+    # Step 7: SMTP verification for non-blocking providers
     smtp_valid = None
     smtp_reason = "Not checked"
     
@@ -407,7 +435,7 @@ def validate_single_email_sync(email: str) -> EmailResult:
         if smtp_valid is not None:
             break
     
-    # Step 7: Determine final status
+    # Step 8: Determine final status
     result_data = {
         'format_valid': True,
         'domain_valid': True,
@@ -426,7 +454,7 @@ def validate_single_email_sync(email: str) -> EmailResult:
         reason = "Disposable/temporary email address"
     elif smtp_valid is False:
         status = EmailStatus.INVALID
-        reason = f"Mailbox does not exist: {smtp_reason}"
+        reason = f"Mailbox does not exist"
     elif smtp_valid is True:
         if role_email:
             status = EmailStatus.RISKY
@@ -436,7 +464,7 @@ def validate_single_email_sync(email: str) -> EmailResult:
             reason = "Email verified - mailbox exists"
     elif smtp_valid is None:
         # SMTP couldn't verify - make decision based on other factors
-        if quality_score >= 0.6:
+        if quality_score >= 0.5:
             status = EmailStatus.VALID
             reason = f"Likely valid (MX verified, {smtp_reason})"
         else:
