@@ -416,25 +416,36 @@ export default function ResultsPage() {
                               <span className={`text-xs px-1.5 py-0.5 rounded ${result.format_valid ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                 Format {result.format_valid ? '✓' : '✗'}
                               </span>
-                              <span className={`text-xs px-1.5 py-0.5 rounded ${result.domain_valid ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                Domain {result.domain_valid ? '✓' : '✗'}
-                              </span>
                               <span className={`text-xs px-1.5 py-0.5 rounded ${result.mx_valid ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                 MX {result.mx_valid ? '✓' : '✗'}
                               </span>
-                              {result.mailbox_verified === true && (
+                              {result.mailbox_status === 'verified' && (
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-medium">
                                   Mailbox ✓
                                 </span>
                               )}
-                              {result.mailbox_verified === false && (
+                              {result.mailbox_status === 'not_found' && (
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-medium">
                                   Mailbox ✗
+                                </span>
+                              )}
+                              {result.mailbox_status === 'catch_all' && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-amber-600">
+                                  Catch-all
                                 </span>
                               )}
                               {result.is_disposable && (
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-rose-50 text-rose-600">
                                   Disposable
+                                </span>
+                              )}
+                              {result.confidence && (
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                  result.confidence >= 90 ? 'bg-emerald-100 text-emerald-700' :
+                                  result.confidence >= 75 ? 'bg-amber-100 text-amber-700' :
+                                  'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {result.confidence}%
                                 </span>
                               )}
                             </div>
