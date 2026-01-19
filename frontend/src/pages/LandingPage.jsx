@@ -143,10 +143,32 @@ export default function LandingPage() {
             <a href="#features" className="text-slate-600 hover:text-slate-900 transition-colors text-sm font-medium">
               Features
             </a>
-            <a href="#how-it-works" className="text-slate-600 hover:text-slate-900 transition-colors text-sm font-medium">
-              How it works
-            </a>
+            <Link to="/pricing" className="text-slate-600 hover:text-slate-900 transition-colors text-sm font-medium">
+              Pricing
+            </Link>
           </nav>
+          <div className="flex items-center gap-3">
+            {user ? (
+              <>
+                <Link to="/dashboard">
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <User className="w-4 h-4" />
+                    Dashboard
+                  </Button>
+                </Link>
+                <Button variant="ghost" size="sm" onClick={logout}>Logout</Button>
+              </>
+            ) : (
+              <>
+                <Link to="/login">
+                  <Button variant="ghost" size="sm">Sign in</Button>
+                </Link>
+                <Link to="/register">
+                  <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700">Sign up free</Button>
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
