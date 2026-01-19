@@ -289,8 +289,12 @@ class EmailValidatorAPITester:
         return success
 
     def test_list_jobs(self):
-        """Test listing all jobs"""
-        return self.run_test("List All Jobs", "GET", "validate/jobs", 200)
+        """Test listing all jobs with authentication"""
+        if not self.token:
+            print("❌ No token available for listing jobs")
+            return False
+            
+        return self.run_test("List All Jobs", "GET", "validate/jobs", 200, auth=True)
 
     def test_invalid_endpoints(self):
         """Test error handling"""
