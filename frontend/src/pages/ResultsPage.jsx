@@ -422,6 +422,16 @@ export default function ResultsPage() {
                               <span className={`text-xs px-1.5 py-0.5 rounded ${result.mx_valid ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                 MX {result.mx_valid ? '✓' : '✗'}
                               </span>
+                              {result.mailbox_verified === true && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-medium">
+                                  Mailbox ✓
+                                </span>
+                              )}
+                              {result.mailbox_verified === false && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-medium">
+                                  Mailbox ✗
+                                </span>
+                              )}
                               {result.is_disposable && (
                                 <span className="text-xs px-1.5 py-0.5 rounded bg-rose-50 text-rose-600">
                                   Disposable
