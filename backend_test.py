@@ -318,15 +318,26 @@ def main():
     
     tester = EmailValidatorAPITester()
     
-    # Run all tests
+    # Run all tests in order
     tests = [
+        # Basic API tests
         tester.test_root_endpoint,
-        tester.test_single_email_validation,
-        tester.test_bulk_email_validation,
+        tester.test_get_plans,
+        
+        # Authentication tests
+        tester.test_user_registration,
+        tester.test_user_login,
+        tester.test_get_user_profile,
+        
+        # Authenticated validation tests
+        tester.test_single_email_validation_authenticated,
+        tester.test_bulk_email_validation_authenticated,
         tester.test_csv_upload,
         tester.test_job_status,
         tester.test_job_export,
         tester.test_list_jobs,
+        
+        # Error handling tests
         tester.test_invalid_endpoints
     ]
     
