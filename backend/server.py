@@ -9,11 +9,13 @@ import re
 import dns.resolver
 import smtplib
 import socket
+import ssl
 import csv
 import io
 import asyncio
 import random
 import string
+import time
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Tuple, Dict
@@ -31,78 +33,92 @@ db = client[os.environ['DB_NAME']]
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # ============================================
-# PROVIDER CLASSIFICATION
+# PROVIDER CLASSIFICATION (Expanded)
 # ============================================
 
-# Providers where we CAN verify if username/mailbox exists (SMTP returns 550 for non-existent)
+# Providers where SMTP verification works reliably
 VERIFIABLE_PROVIDERS = {
-    "gmail.com", "googlemail.com", "google.com",  # Google
-    "icloud.com", "me.com", "mac.com",  # Apple
-    "protonmail.com", "proton.me", "pm.me",  # Proton
-    "zoho.com", "zohomail.com",  # Zoho
-    "fastmail.com", "fastmail.fm",  # Fastmail
-    "tutanota.com", "tutanota.de", "tutamail.com",  # Tutanota
-    "hey.com",  # Basecamp Hey
-    "runbox.com",  # Runbox
-    "posteo.de", "posteo.net",  # Posteo
-    "mailbox.org",  # Mailbox.org
+    # Google
+    "gmail.com", "googlemail.com", "google.com",
+    # Apple  
+    "icloud.com", "me.com", "mac.com",
+    # Proton
+    "protonmail.com", "proton.me", "pm.me",
+    # Other verifiable
+    "zoho.com", "zohomail.com",
+    "fastmail.com", "fastmail.fm",
+    "tutanota.com", "tutanota.de", "tutamail.com",
+    "hey.com", "runbox.com",
+    "posteo.de", "posteo.net",
+    "mailbox.org",
+    "migadu.com",
+    "soverin.net",
+    "disroot.org",
+    "riseup.net",
 }
 
-# Providers that are CATCH-ALL (accept everything - can't verify username)
+# Catch-all providers (accept everything)
 CATCHALL_PROVIDERS = {
-    "yahoo.com", "yahoo.co.uk", "yahoo.fr", "yahoo.de", "yahoo.es", "yahoo.it", "ymail.com",
-    "aol.com", "aim.com",
-    "att.net", "sbcglobal.net", "bellsouth.net", "pacbell.net", "ameritech.net", "flash.net",
-    "verizon.net",
-    "cox.net",
-    "charter.net", "spectrum.net",
-    "earthlink.net",
-    "juno.com", "netzero.com",
+    "yahoo.com", "yahoo.co.uk", "yahoo.fr", "yahoo.de", "yahoo.es", "yahoo.it", "ymail.com", "rocketmail.com",
+    "aol.com", "aim.com", "love.com", "ygm.com", "games.com",
+    "att.net", "sbcglobal.net", "bellsouth.net", "pacbell.net", "ameritech.net", "flash.net", "nvbell.net",
+    "verizon.net", "frontier.com", "windstream.net",
+    "cox.net", "charter.net", "spectrum.net", "brighthouse.com",
+    "earthlink.net", "mindspring.com",
+    "juno.com", "netzero.com", "peoplepc.com",
 }
 
-# Providers that BLOCK SMTP verification entirely
+# Providers that block SMTP
 BLOCKING_PROVIDERS = {
-    "outlook.com", "hotmail.com", "live.com", "msn.com", "hotmail.co.uk", "hotmail.fr",
-    "gmx.com", "gmx.de", "gmx.net",
-    "mail.com",
+    "outlook.com", "hotmail.com", "live.com", "msn.com", "hotmail.co.uk", "hotmail.fr", "hotmail.de", "outlook.co.uk",
+    "gmx.com", "gmx.de", "gmx.net", "gmx.at", "gmx.ch",
+    "mail.com", "email.com", "usa.com", "post.com",
     "comcast.net", "xfinity.com",
     "mail.ru", "inbox.ru", "list.ru", "bk.ru",
     "yandex.com", "yandex.ru", "ya.ru",
-    "163.com", "126.com", "qq.com",  # Chinese providers
-    "web.de",
-    "t-online.de",
-    "orange.fr", "wanadoo.fr",
-    "libero.it", "virgilio.it",
+    "163.com", "126.com", "qq.com", "sina.com", "sohu.com",
+    "web.de", "freenet.de",
+    "t-online.de", "vodafone.de",
+    "orange.fr", "wanadoo.fr", "free.fr", "sfr.fr", "laposte.net",
+    "libero.it", "virgilio.it", "tin.it", "alice.it",
+    "uol.com.br", "bol.com.br", "terra.com.br",
 }
 
-# Disposable email domains (expanded list)
+# Disposable domains (100+)
 DISPOSABLE_DOMAINS = {
-    "tempmail.com", "temp-mail.org", "10minutemail.com", "10minutemail.net",
-    "guerrillamail.com", "guerrillamail.org", "guerrillamail.net", "guerrillamail.biz",
-    "mailinator.com", "mailinator2.com", "mailinator.net",
-    "throwaway.email", "throwawaymail.com",
-    "fakeinbox.com", "trashmail.com", "trashmail.net",
-    "getnada.com", "nada.email",
+    "tempmail.com", "temp-mail.org", "10minutemail.com", "10minutemail.net", "10minmail.com",
+    "guerrillamail.com", "guerrillamail.org", "guerrillamail.net", "guerrillamail.biz", "guerrillamail.de",
+    "mailinator.com", "mailinator2.com", "mailinator.net", "mailinator.org",
+    "throwaway.email", "throwawaymail.com", "throw-away.email",
+    "fakeinbox.com", "trashmail.com", "trashmail.net", "trashmail.org",
+    "getnada.com", "nada.email", "tempinbox.com",
     "mohmal.com", "maildrop.cc", "mailnesia.com",
-    "yopmail.com", "yopmail.fr", "yopmail.net",
+    "yopmail.com", "yopmail.fr", "yopmail.net", "cool.fr.nf",
     "dispostable.com", "sharklasers.com", "spam4.me", "grr.la",
     "tempail.com", "tmpmail.org", "tmpeml.com",
-    "emailondeck.com", "minutemail.com",
-    "tempr.email", "tempinbox.com", "tempmailaddress.com",
+    "emailondeck.com", "minutemail.com", "20minutemail.com",
+    "tempr.email", "tempmailaddress.com",
     "burnermail.io", "mailsac.com", "spamgourmet.com",
     "mytemp.email", "getairmail.com", "tempmailo.com",
     "33mail.com", "dropmail.me", "mailcatch.com",
     "mailexpire.com", "meltmail.com", "mintemail.com",
     "mytrashmail.com", "spambox.us", "spamex.com",
-    "trashymail.com", "zehnminuten.de", "20minutemail.com",
+    "trashymail.com", "trashymail.net", "zehnminuten.de",
     "mailnull.com", "e4ward.com", "spamcowboy.com",
     "fakemailgenerator.com", "armyspy.com", "cuvox.de",
     "dayrep.com", "einrot.com", "fleckens.hu", "gustr.com",
     "jourrapide.com", "rhyta.com", "superrito.com", "teleworm.us",
+    "discard.email", "discardmail.com", "disposableemailaddresses.com",
+    "emailsensei.com", "fakemailgenerator.net", "imgof.com",
+    "jetable.org", "kasmail.com", "mailcatch.com", "mailseal.de",
+    "nospam.ze.tc", "nowmymail.com", "spamfree24.org",
+    "spamobox.com", "tempemail.co.za", "tempemail.com",
+    "tempemailgen.com", "tempsky.com", "trashemail.de",
+    "wegwerfmail.de", "wegwerfmail.net", "willhackforfood.biz",
 }
 
 class EmailStatus(str, Enum):
@@ -124,10 +140,10 @@ class EmailResult(BaseModel):
     format_valid: bool
     domain_valid: bool
     mx_valid: bool
-    mailbox_status: str  # "verified", "not_found", "catch_all", "blocked", "unknown"
+    mailbox_status: str
     is_disposable: bool
-    provider_type: str  # "verifiable", "catch_all", "blocked", "unknown"
-    confidence: int  # 0-100%
+    provider_type: str
+    confidence: int
     reason: str
 
 class ValidationJob(BaseModel):
@@ -148,179 +164,193 @@ class BulkValidateRequest(BaseModel):
     emails: List[str]
 
 # ============================================
+# ADVANCED SMTP VERIFICATION
+# ============================================
+
+def get_mx_records(domain: str) -> List[str]:
+    """Get MX records sorted by priority"""
+    try:
+        records = dns.resolver.resolve(domain, 'MX')
+        return [str(r.exchange).rstrip('.') for r in sorted(records, key=lambda x: x.preference)]
+    except:
+        return []
+
+def smtp_verify_advanced(email: str, mx_host: str, retry_count: int = 2) -> Tuple[Optional[bool], str, int]:
+    """
+    Advanced SMTP verification with multiple techniques
+    Returns: (exists, reason, response_code)
+    """
+    helo_domains = [
+        'mail.google.com',
+        'mx.outlook.com', 
+        'mail.yahoo.com',
+        'smtp.verify.net',
+    ]
+    
+    from_addresses = [
+        'postmaster@gmail.com',
+        'mailer-daemon@outlook.com',
+        'verify@yahoo.com',
+        f'check@{email.split("@")[1]}',
+    ]
+    
+    last_code = 0
+    last_msg = ""
+    
+    for attempt in range(retry_count):
+        for use_tls in [False, True]:
+            try:
+                smtp = smtplib.SMTP(timeout=12)
+                smtp.connect(mx_host, 25)
+                
+                # Use random HELO domain
+                helo = random.choice(helo_domains)
+                smtp.helo(helo)
+                
+                # Try STARTTLS
+                if use_tls:
+                    try:
+                        context = ssl.create_default_context()
+                        context.check_hostname = False
+                        context.verify_mode = ssl.CERT_NONE
+                        smtp.starttls(context=context)
+                        smtp.helo(helo)
+                    except:
+                        pass
+                
+                # Use random FROM address
+                from_addr = random.choice(from_addresses)
+                smtp.mail(from_addr)
+                
+                code, message = smtp.rcpt(email)
+                smtp.quit()
+                
+                last_code = code
+                last_msg = message.decode() if isinstance(message, bytes) else str(message)
+                
+                # Analyze response
+                msg_lower = last_msg.lower()
+                
+                # Definite exists
+                if code == 250:
+                    return True, "Mailbox exists", code
+                
+                # Definite not exists
+                if code == 550:
+                    not_exist_phrases = [
+                        "does not exist", "doesn't exist", "user unknown", "no such user",
+                        "mailbox not found", "recipient rejected", "invalid recipient",
+                        "user not found", "no mailbox", "unknown user", "invalid address",
+                        "undeliverable", "not found", "disabled", "deactivated"
+                    ]
+                    if any(phrase in msg_lower for phrase in not_exist_phrases):
+                        return False, "Mailbox does not exist", code
+                
+                # Rate limited or greylisted - retry
+                if code in [450, 451, 452, 421]:
+                    time.sleep(1)
+                    continue
+                
+                # Mailbox full = exists
+                if code == 552:
+                    return True, "Mailbox exists (full)", code
+                
+                # Other 5xx errors
+                if code >= 500:
+                    return False, f"Rejected ({code})", code
+                    
+            except smtplib.SMTPServerDisconnected:
+                last_msg = "Server disconnected"
+            except smtplib.SMTPConnectError:
+                last_msg = "Connection refused"
+            except socket.timeout:
+                last_msg = "Timeout"
+            except Exception as e:
+                last_msg = str(e)[:50]
+    
+    return None, last_msg, last_code
+
+def check_catchall(domain: str, mx_host: str) -> Optional[bool]:
+    """Check if domain accepts all emails (catch-all)"""
+    random_user = ''.join(random.choices(string.ascii_lowercase + string.digits, k=30))
+    fake_email = f"doesnotexist_{random_user}@{domain}"
+    
+    try:
+        smtp = smtplib.SMTP(timeout=8)
+        smtp.connect(mx_host, 25)
+        smtp.helo('mail.checker.net')
+        smtp.mail('test@checker.net')
+        code, _ = smtp.rcpt(fake_email)
+        smtp.quit()
+        return code == 250
+    except:
+        return None
+
+# ============================================
 # VALIDATION FUNCTIONS
 # ============================================
 
-def validate_email_format(email: str) -> Tuple[bool, str]:
-    """Strict email format validation"""
+def validate_format(email: str) -> Tuple[bool, str]:
+    """Strict format validation"""
     email = email.strip().lower()
     
-    if not email:
-        return False, "Empty email"
-    if len(email) > 254:
-        return False, "Email too long"
+    if not email or len(email) > 254:
+        return False, "Invalid length"
     if email.count('@') != 1:
         return False, "Must have exactly one @"
     
     local, domain = email.split('@')
     
-    # Local part validation
-    if not local:
-        return False, "Missing username"
-    if len(local) > 64:
-        return False, "Username too long"
-    if local.startswith('.') or local.endswith('.'):
-        return False, "Username can't start/end with dot"
-    if '..' in local:
-        return False, "Username has consecutive dots"
-    
-    # Domain validation
-    if not domain:
-        return False, "Missing domain"
-    if len(domain) > 253:
-        return False, "Domain too long"
-    if '.' not in domain:
+    if not local or len(local) > 64:
+        return False, "Invalid username"
+    if local[0] in '.-' or local[-1] in '.-' or '..' in local:
+        return False, "Invalid username format"
+    if not domain or '.' not in domain or len(domain) > 253:
         return False, "Invalid domain"
-    if domain.startswith('.') or domain.endswith('.'):
-        return False, "Invalid domain format"
-    if domain.startswith('-') or domain.endswith('-'):
+    if domain[0] in '-.' or domain[-1] in '-.' or '..' in domain:
         return False, "Invalid domain format"
     
-    # Regex validation
-    local_pattern = r'^[a-zA-Z0-9.!#$%&\'*+/=?^_`{|}~-]+$'
-    domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
+    # Regex check
+    if not re.match(r'^[a-zA-Z0-9.!#$%&\'*+/=?^_`{|}~-]+$', local):
+        return False, "Invalid characters"
+    if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$', domain):
+        return False, "Invalid domain"
     
-    if not re.match(local_pattern, local):
-        return False, "Invalid characters in username"
-    if not re.match(domain_pattern, domain):
-        return False, "Invalid domain format"
-    
-    return True, "Valid format"
+    return True, "Valid"
 
-def validate_domain_exists(domain: str) -> Tuple[bool, str]:
-    """Check if domain exists in DNS"""
+def domain_exists(domain: str) -> bool:
+    """Check if domain exists"""
     try:
         socket.gethostbyname(domain)
-        return True, "Domain exists"
-    except socket.gaierror:
-        # Try MX lookup as fallback
+        return True
+    except:
         try:
             dns.resolver.resolve(domain, 'MX')
-            return True, "Domain exists (MX)"
+            return True
         except:
-            return False, "Domain not found"
-
-def get_mx_records(domain: str) -> Tuple[List[str], str]:
-    """Get MX records sorted by priority"""
-    try:
-        records = dns.resolver.resolve(domain, 'MX')
-        mx_list = [str(r.exchange).rstrip('.') for r in sorted(records, key=lambda x: x.preference)]
-        return mx_list, f"{len(mx_list)} mail server(s)"
-    except dns.resolver.NXDOMAIN:
-        return [], "Domain not found"
-    except dns.resolver.NoAnswer:
-        return [], "No mail servers"
-    except dns.resolver.NoNameservers:
-        return [], "DNS error"
-    except Exception as e:
-        return [], f"DNS error: {str(e)[:20]}"
-
-def check_if_catchall(domain: str, mx_host: str) -> Optional[bool]:
-    """
-    Check if domain is catch-all by testing with random non-existent address
-    Returns: True=catch-all, False=not catch-all, None=couldn't determine
-    """
-    random_user = ''.join(random.choices(string.ascii_lowercase + string.digits, k=25))
-    fake_email = f"nonexistent_{random_user}@{domain}"
-    
-    try:
-        smtp = smtplib.SMTP(timeout=10)
-        smtp.connect(mx_host)
-        smtp.ehlo_or_helo_if_needed()
-        smtp.mail('test@verifier.local')
-        code, _ = smtp.rcpt(fake_email)
-        smtp.quit()
-        
-        # If accepts random address = catch-all
-        return code == 250
-    except:
-        return None
-
-def verify_mailbox_smtp(email: str, mx_host: str) -> Tuple[Optional[bool], str]:
-    """
-    Verify mailbox via SMTP RCPT TO command
-    Returns: (True=exists, False=doesn't exist, None=unknown), reason
-    """
-    try:
-        smtp = smtplib.SMTP(timeout=12)
-        smtp.connect(mx_host)
-        smtp.ehlo_or_helo_if_needed()
-        smtp.mail('verify@mailverifier.local')
-        code, message = smtp.rcpt(email)
-        smtp.quit()
-        
-        msg_str = message.decode() if isinstance(message, bytes) else str(message)
-        msg_lower = msg_str.lower()
-        
-        if code == 250:
-            return True, "Mailbox exists"
-        elif code == 550:
-            # Check for specific rejection messages
-            if any(x in msg_lower for x in ["does not exist", "user unknown", "no such user", 
-                                            "recipient rejected", "mailbox not found", "invalid recipient",
-                                            "unknown user", "user not found", "no mailbox"]):
-                return False, "Mailbox does not exist"
-            return False, "Mailbox rejected"
-        elif code == 551:
-            return False, "User not local"
-        elif code == 552:
-            return True, "Mailbox full (but exists)"
-        elif code == 553:
-            return False, "Invalid mailbox"
-        elif code in [450, 451, 452]:
-            return None, "Server busy, try later"
-        elif code == 421:
-            return None, "Server unavailable"
-        else:
-            return None, f"Unknown response ({code})"
-            
-    except smtplib.SMTPServerDisconnected:
-        return None, "Server disconnected"
-    except smtplib.SMTPConnectError:
-        return None, "Connection refused"
-    except socket.timeout:
-        return None, "Timeout"
-    except socket.gaierror:
-        return None, "DNS error"
-    except Exception as e:
-        return None, str(e)[:30]
+            return False
 
 def get_provider_type(domain: str) -> str:
-    """Classify the email provider"""
-    domain = domain.lower()
-    
-    if domain in VERIFIABLE_PROVIDERS:
+    """Classify provider"""
+    d = domain.lower()
+    if d in VERIFIABLE_PROVIDERS:
         return "verifiable"
-    elif domain in CATCHALL_PROVIDERS:
+    if d in CATCHALL_PROVIDERS:
         return "catch_all"
-    elif domain in BLOCKING_PROVIDERS:
+    if d in BLOCKING_PROVIDERS:
         return "blocked"
-    else:
-        return "unknown"
+    return "unknown"
 
 def is_disposable(domain: str) -> bool:
-    """Check if domain is disposable"""
     return domain.lower() in DISPOSABLE_DOMAINS
 
-def validate_single_email_sync(email: str) -> EmailResult:
-    """
-    Comprehensive email validation with confidence scoring
-    """
+def validate_email_sync(email: str) -> EmailResult:
+    """Full email validation"""
     email = email.strip().lower()
     
-    # Step 1: Format validation
-    format_valid, format_msg = validate_email_format(email)
-    if not format_valid:
+    # Format check
+    format_ok, format_msg = validate_format(email)
+    if not format_ok:
         return EmailResult(
             email=email, status=EmailStatus.INVALID,
             format_valid=False, domain_valid=False, mx_valid=False,
@@ -331,97 +361,94 @@ def validate_single_email_sync(email: str) -> EmailResult:
     
     domain = email.split('@')[1]
     disposable = is_disposable(domain)
-    provider_type = get_provider_type(domain)
+    provider = get_provider_type(domain)
     
-    # Step 2: Domain validation
-    domain_valid, domain_msg = validate_domain_exists(domain)
-    if not domain_valid:
+    # Domain check
+    if not domain_exists(domain):
         return EmailResult(
             email=email, status=EmailStatus.INVALID,
             format_valid=True, domain_valid=False, mx_valid=False,
-            mailbox_status="domain_not_found", is_disposable=disposable,
-            provider_type=provider_type, confidence=100,
-            reason=f"Invalid: {domain_msg}"
+            mailbox_status="domain_invalid", is_disposable=disposable,
+            provider_type=provider, confidence=100,
+            reason="Invalid: Domain does not exist"
         )
     
-    # Step 3: MX record validation
-    mx_records, mx_msg = get_mx_records(domain)
+    # MX check
+    mx_records = get_mx_records(domain)
     if not mx_records:
         return EmailResult(
             email=email, status=EmailStatus.INVALID,
             format_valid=True, domain_valid=True, mx_valid=False,
-            mailbox_status="no_mx_records", is_disposable=disposable,
-            provider_type=provider_type, confidence=100,
-            reason=f"Invalid: {mx_msg}"
+            mailbox_status="no_mx", is_disposable=disposable,
+            provider_type=provider, confidence=100,
+            reason="Invalid: No mail servers found"
         )
     
-    # Step 4: Handle disposable emails
+    # Disposable check
     if disposable:
         return EmailResult(
             email=email, status=EmailStatus.RISKY,
             format_valid=True, domain_valid=True, mx_valid=True,
             mailbox_status="disposable", is_disposable=True,
-            provider_type=provider_type, confidence=95,
+            provider_type=provider, confidence=95,
             reason="Risky: Disposable/temporary email"
         )
     
-    # Step 5: Provider-specific validation
     mx_host = mx_records[0]
     
-    if provider_type == "verifiable":
-        # These providers tell us if mailbox exists - skip catch-all check
-        mailbox_exists, mailbox_reason = verify_mailbox_smtp(email, mx_host)
+    # Provider-specific handling
+    if provider == "verifiable":
+        # Try SMTP verification
+        exists, reason, code = smtp_verify_advanced(email, mx_host)
         
-        if mailbox_exists is True:
+        if exists is True:
             return EmailResult(
                 email=email, status=EmailStatus.VALID,
                 format_valid=True, domain_valid=True, mx_valid=True,
                 mailbox_status="verified", is_disposable=False,
-                provider_type=provider_type, confidence=99,
-                reason="Valid: Mailbox verified to exist"
+                provider_type=provider, confidence=99,
+                reason="Valid: Mailbox verified"
             )
-        elif mailbox_exists is False:
+        elif exists is False:
             return EmailResult(
                 email=email, status=EmailStatus.INVALID,
                 format_valid=True, domain_valid=True, mx_valid=True,
                 mailbox_status="not_found", is_disposable=False,
-                provider_type=provider_type, confidence=99,
-                reason=f"Invalid: {mailbox_reason}"
+                provider_type=provider, confidence=99,
+                reason=f"Invalid: {reason}"
             )
         else:
-            # Couldn't verify but it's a known verifiable provider - likely valid
+            # Couldn't verify - rate limited or connection issue
             return EmailResult(
                 email=email, status=EmailStatus.VALID,
                 format_valid=True, domain_valid=True, mx_valid=True,
                 mailbox_status="unverified", is_disposable=False,
-                provider_type=provider_type, confidence=85,
-                reason=f"Valid: {domain} can receive email ({mailbox_reason})"
+                provider_type=provider, confidence=85,
+                reason=f"Valid: {domain} can receive email"
             )
     
-    elif provider_type == "catch_all":
-        # These providers accept everything - can't verify username
+    elif provider == "catch_all":
         return EmailResult(
             email=email, status=EmailStatus.VALID,
             format_valid=True, domain_valid=True, mx_valid=True,
             mailbox_status="catch_all", is_disposable=False,
-            provider_type=provider_type, confidence=75,
-            reason=f"Valid: {domain} accepts all addresses (catch-all)"
+            provider_type=provider, confidence=75,
+            reason=f"Valid: {domain} accepts all addresses"
         )
     
-    elif provider_type == "blocked":
-        # These providers block SMTP verification
+    elif provider == "blocked":
         return EmailResult(
             email=email, status=EmailStatus.VALID,
             format_valid=True, domain_valid=True, mx_valid=True,
             mailbox_status="blocked", is_disposable=False,
-            provider_type=provider_type, confidence=80,
+            provider_type=provider, confidence=80,
             reason=f"Valid: {domain} can receive email"
         )
     
     else:
-        # Unknown provider - try SMTP verification
-        # First check if it's catch-all
-        is_catchall = check_if_catchall(domain, mx_host)
+        # Unknown provider - try verification
+        # First check catch-all
+        is_catchall = check_catchall(domain, mx_host)
         
         if is_catchall is True:
             return EmailResult(
@@ -429,78 +456,63 @@ def validate_single_email_sync(email: str) -> EmailResult:
                 format_valid=True, domain_valid=True, mx_valid=True,
                 mailbox_status="catch_all", is_disposable=False,
                 provider_type="catch_all", confidence=75,
-                reason=f"Valid: {domain} accepts all addresses (catch-all)"
+                reason=f"Valid: {domain} accepts all addresses"
             )
         
-        # Try SMTP verification
-        mailbox_exists, mailbox_reason = verify_mailbox_smtp(email, mx_host)
+        # Try SMTP
+        exists, reason, code = smtp_verify_advanced(email, mx_host)
         
-        if mailbox_exists is True:
-            if is_catchall is False:
-                confidence = 95
-                mailbox_status = "verified"
-            else:
-                confidence = 80
-                mailbox_status = "accepted"
-            
+        if exists is True:
+            conf = 95 if is_catchall is False else 80
             return EmailResult(
                 email=email, status=EmailStatus.VALID,
                 format_valid=True, domain_valid=True, mx_valid=True,
-                mailbox_status=mailbox_status, is_disposable=False,
-                provider_type="unknown", confidence=confidence,
-                reason="Valid: Mailbox exists"
+                mailbox_status="verified", is_disposable=False,
+                provider_type="unknown", confidence=conf,
+                reason="Valid: Mailbox verified"
             )
-        elif mailbox_exists is False:
+        elif exists is False:
             return EmailResult(
                 email=email, status=EmailStatus.INVALID,
                 format_valid=True, domain_valid=True, mx_valid=True,
                 mailbox_status="not_found", is_disposable=False,
                 provider_type="unknown", confidence=90,
-                reason=f"Invalid: {mailbox_reason}"
+                reason=f"Invalid: {reason}"
             )
         else:
-            # Couldn't verify - mark as valid with lower confidence
             return EmailResult(
                 email=email, status=EmailStatus.VALID,
                 format_valid=True, domain_valid=True, mx_valid=True,
                 mailbox_status="unverified", is_disposable=False,
                 provider_type="unknown", confidence=70,
-                reason=f"Valid: Domain can receive email ({mailbox_reason})"
+                reason=f"Valid: Domain can receive email"
             )
 
-async def validate_single_email(email: str) -> EmailResult:
+async def validate_email(email: str) -> EmailResult:
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, validate_single_email_sync, email)
+    return await loop.run_in_executor(None, validate_email_sync, email)
 
-async def process_validation_job(job_id: str, emails: List[str]):
+async def process_job(job_id: str, emails: List[str]):
     try:
         await db.validation_jobs.update_one({"id": job_id}, {"$set": {"status": JobStatus.PROCESSING}})
         
         results = []
-        valid_count = invalid_count = risky_count = unknown_count = 0
+        counts = {"valid": 0, "invalid": 0, "risky": 0, "unknown": 0}
         
         for i, email in enumerate(emails):
-            result = await validate_single_email(email)
+            result = await validate_email(email)
             results.append(result.model_dump())
-            
-            if result.status == EmailStatus.VALID:
-                valid_count += 1
-            elif result.status == EmailStatus.INVALID:
-                invalid_count += 1
-            elif result.status == EmailStatus.RISKY:
-                risky_count += 1
-            else:
-                unknown_count += 1
+            counts[result.status.value] += 1
             
             if (i + 1) % 5 == 0 or i == len(emails) - 1:
                 await db.validation_jobs.update_one(
                     {"id": job_id},
                     {"$set": {
                         "processed_emails": i + 1,
-                        "valid_count": valid_count,
-                        "invalid_count": invalid_count,
-                        "risky_count": risky_count,
-                        "unknown_count": unknown_count,
+                        "valid_count": counts["valid"],
+                        "invalid_count": counts["invalid"],
+                        "risky_count": counts["risky"],
+                        "unknown_count": counts["unknown"],
                         "results": results
                     }}
                 )
@@ -509,10 +521,9 @@ async def process_validation_job(job_id: str, emails: List[str]):
             {"id": job_id},
             {"$set": {"status": JobStatus.COMPLETED, "completed_at": datetime.now(timezone.utc).isoformat()}}
         )
-        logger.info(f"Job {job_id}: {valid_count} valid, {invalid_count} invalid, {risky_count} risky, {unknown_count} unknown")
-        
+        logger.info(f"Job {job_id} done: {counts}")
     except Exception as e:
-        logger.error(f"Job {job_id} failed: {str(e)}")
+        logger.error(f"Job {job_id} failed: {e}")
         await db.validation_jobs.update_one({"id": job_id}, {"$set": {"status": JobStatus.FAILED}})
 
 # ============================================
@@ -521,81 +532,84 @@ async def process_validation_job(job_id: str, emails: List[str]):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Email Validator API v2.0"}
+    return {"message": "Email Validator API v3.0 - Advanced"}
 
 @api_router.post("/validate/single")
 async def validate_single(email: str):
-    result = await validate_single_email(email)
-    return result.model_dump()
+    return (await validate_email(email)).model_dump()
 
 @api_router.post("/validate/bulk")
 async def validate_bulk(request: BulkValidateRequest, background_tasks: BackgroundTasks):
-    emails = [e.strip() for e in request.emails if e.strip()]
+    emails = list(set(e.strip() for e in request.emails if e.strip() and '@' in e))
     if not emails:
-        raise HTTPException(status_code=400, detail="No emails")
+        raise HTTPException(400, "No valid emails")
     if len(emails) > 10000:
-        raise HTTPException(status_code=400, detail="Max 10,000 emails")
+        raise HTTPException(400, "Max 10,000 emails")
     
-    job = ValidationJob(total_emails=len(emails), results=[])
-    job_doc = job.model_dump()
-    job_doc['created_at'] = job_doc['created_at'].isoformat()
-    await db.validation_jobs.insert_one(job_doc)
-    background_tasks.add_task(process_validation_job, job.id, emails)
+    job = ValidationJob(total_emails=len(emails))
+    doc = job.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.validation_jobs.insert_one(doc)
+    background_tasks.add_task(process_job, job.id, emails)
     return {"job_id": job.id, "total_emails": len(emails), "status": job.status}
 
 @api_router.post("/validate/upload")
 async def validate_upload(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="CSV only")
+        raise HTTPException(400, "CSV only")
     
     content = await file.read()
-    emails = [cell.strip() for row in csv.reader(io.StringIO(content.decode('utf-8'))) 
-              for cell in row if '@' in cell.strip()]
+    emails = list(set(
+        cell.strip().lower() 
+        for row in csv.reader(io.StringIO(content.decode('utf-8'))) 
+        for cell in row 
+        if '@' in cell.strip()
+    ))
     
     if not emails:
-        raise HTTPException(status_code=400, detail="No emails in file")
+        raise HTTPException(400, "No emails found")
     if len(emails) > 10000:
-        raise HTTPException(status_code=400, detail="Max 10,000 emails")
+        raise HTTPException(400, "Max 10,000")
     
-    job = ValidationJob(total_emails=len(emails), results=[])
-    job_doc = job.model_dump()
-    job_doc['created_at'] = job_doc['created_at'].isoformat()
-    await db.validation_jobs.insert_one(job_doc)
-    background_tasks.add_task(process_validation_job, job.id, emails)
+    job = ValidationJob(total_emails=len(emails))
+    doc = job.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.validation_jobs.insert_one(doc)
+    background_tasks.add_task(process_job, job.id, emails)
     return {"job_id": job.id, "total_emails": len(emails), "status": job.status}
 
 @api_router.get("/validate/job/{job_id}")
-async def get_job_status(job_id: str):
+async def get_job(job_id: str):
     job = await db.validation_jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(404, "Not found")
     return job
 
 @api_router.get("/validate/job/{job_id}/export")
-async def export_job_results(job_id: str, status_filter: Optional[str] = None):
+async def export_job(job_id: str, status_filter: Optional[str] = None):
     job = await db.validation_jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(404, "Not found")
     if job['status'] != JobStatus.COMPLETED:
-        raise HTTPException(status_code=400, detail="Not completed")
+        raise HTTPException(400, "Not completed")
     
     results = job.get('results', [])
     if status_filter:
         results = [r for r in results if r['status'] == status_filter]
     
     output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['Email', 'Status', 'Confidence', 'Mailbox Status', 'Provider Type', 'Disposable', 'Reason'])
+    w = csv.writer(output)
+    w.writerow(['Email', 'Status', 'Confidence', 'Mailbox', 'Provider', 'Disposable', 'Reason'])
     for r in results:
-        writer.writerow([r['email'], r['status'], f"{r['confidence']}%", 
-                        r['mailbox_status'], r['provider_type'], r['is_disposable'], r['reason']])
+        w.writerow([r['email'], r['status'], f"{r['confidence']}%", r['mailbox_status'], 
+                   r['provider_type'], r['is_disposable'], r['reason']])
     
     output.seek(0)
     return StreamingResponse(iter([output.getvalue()]), media_type="text/csv",
-                            headers={"Content-Disposition": f"attachment; filename=emails_{job_id}.csv"})
+                            headers={"Content-Disposition": f"attachment; filename=validation_{job_id}.csv"})
 
 @api_router.get("/validate/jobs")
-async def get_all_jobs(limit: int = 20):
+async def list_jobs(limit: int = 20):
     return await db.validation_jobs.find({}, {"_id": 0, "results": 0}).sort("created_at", -1).to_list(limit)
 
 app.include_router(api_router)
@@ -604,5 +618,5 @@ app.add_middleware(CORSMiddleware, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
 @app.on_event("shutdown")
-async def shutdown_db_client():
+async def shutdown():
     client.close()
