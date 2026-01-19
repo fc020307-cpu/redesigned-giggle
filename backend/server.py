@@ -99,8 +99,8 @@ async def validate_with_abstract_api(email: str) -> Optional[dict]:
         return None
     
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as http_client:
+            response = await http_client.get(
                 ABSTRACT_API_URL,
                 params={
                     "api_key": ABSTRACT_API_KEY,
@@ -114,7 +114,7 @@ async def validate_with_abstract_api(email: str) -> Optional[dict]:
                 logger.warning("Abstract API rate limit exceeded")
                 return None
             else:
-                logger.error(f"Abstract API error: {response.status_code}")
+                logger.error(f"Abstract API error: {response.status_code} - {response.text}")
                 return None
                 
     except Exception as e:
