@@ -65,6 +65,93 @@ class EmailValidatorAPITester:
         """Test root API endpoint"""
         return self.run_test("Root API", "GET", "", 200)
 
+    def test_user_registration(self):
+        """Test user registration"""
+        timestamp = int(time.time())
+        test_user = {
+            "name": "Test User",
+            "email": f"newuser{timestamp}@test.com",
+            "password": "test123"
+        }
+        
+        success, response = self.run_test(
+            "User Registration",
+            "POST",
+            "auth/register",
+            200,
+            data=test_user
+        )
+        
+        if success and 'token' in response:
+            self.token = response['token']
+            self.user_data = response['user']
+            print(f"   User ID: {self.user_data.get('id', 'N/A')}")
+            print(f"   User Plan: {self.user_data.get('plan', 'N/A')}")
+        
+        return success
+
+    def test_user_login(self):
+        """Test user login with existing user"""
+        if not self.user_data:
+            print("❌ No user data available for login test")
+            return False
+            
+        login_data = {
+            "email": "newuser@test.com",
+            "password": "test123"
+        }
+        
+        success, response = self.run_test(
+            "User Login",
+            "POST",
+            "auth/login",
+            200,
+            data=login_data
+        )
+        
+        if success and 'token' in response:
+            print(f"   Login successful for: {response['user'].get('email', 'N/A')}")
+        
+        return success
+
+    def test_get_user_profile(self):
+        """Test getting user profile"""
+        if not self.token:
+            print("❌ No token available for profile test")
+            return False
+            
+        success, response = self.run_test(
+            "Get User Profile",
+            "GET",
+            "auth/me",
+            200,
+            auth=True
+        )
+        
+        if success:
+            print(f"   Profile Email: {response.get('email', 'N/A')}")
+            print(f"   Verifications Used: {response.get('verifications_used', 0)}")
+            print(f"   Verifications Limit: {response.get('verifications_limit', 0)}")
+        
+        return success
+
+    def test_get_plans(self):
+        """Test getting pricing plans"""
+        success, response = self.run_test(
+            "Get Pricing Plans",
+            "GET",
+            "plans",
+            200
+        )
+        
+        if success:
+            plans = response
+            print(f"   Available plans: {list(plans.keys())}")
+            for plan_id, plan_data in plans.items():
+                print(f"   {plan_id}: ${plan_data.get('price', 0)}/month - {plan_data.get('verifications_per_month', 0)} verifications")
+        
+        return success
+
     def test_single_email_validation(self):
         """Test single email validation"""
         test_cases = [
