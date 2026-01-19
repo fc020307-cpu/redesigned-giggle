@@ -123,6 +123,19 @@ class ValidationJob(BaseModel):
 class BulkValidateRequest(BaseModel):
     emails: List[str]
 
+# Major providers that block SMTP verification (treat MX-verified as valid)
+SMTP_BLOCKING_PROVIDERS = {
+    "gmail.com", "googlemail.com", "google.com",
+    "yahoo.com", "yahoo.co.uk", "yahoo.fr", "yahoo.de", "yahoo.es", "yahoo.it",
+    "outlook.com", "hotmail.com", "live.com", "msn.com",
+    "icloud.com", "me.com", "mac.com",
+    "aol.com", "protonmail.com", "proton.me",
+    "zoho.com", "mail.com", "gmx.com", "gmx.de",
+    "yandex.com", "yandex.ru", "mail.ru",
+    "comcast.net", "verizon.net", "att.net", "sbcglobal.net", "bellsouth.net",
+    "cox.net", "charter.net", "earthlink.net", "juno.com", "netzero.com"
+}
+
 # Free email providers (legitimate but free)
 FREE_EMAIL_PROVIDERS = {
     "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk", "yahoo.fr",
