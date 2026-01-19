@@ -73,11 +73,18 @@ export default function LandingPage() {
       return;
     }
 
+    if (!user && emailList.length > 10) {
+      toast.error("Sign up for free to validate more than 10 emails");
+      navigate("/register");
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API}/validate/bulk`, {
-        emails: emailList
-      });
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      
+      const response = await axios.post(`${API}/validate/bulk`, { emails: emailList }, { headers });
       toast.success(`Validation started for ${emailList.length} emails`);
       navigate(`/results/${response.data.job_id}`);
     } catch (error) {
@@ -93,13 +100,22 @@ export default function LandingPage() {
       return;
     }
 
+    if (!user) {
+      toast.error("Sign up for free to upload files");
+      navigate("/register");
+      return;
+    }
+
     setIsLoading(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
       
+      const headers = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      
       const response = await axios.post(`${API}/validate/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { ...headers, 'Content-Type': 'multipart/form-data' }
       });
       toast.success(`Validation started for ${response.data.total_emails} emails`);
       navigate(`/results/${response.data.job_id}`);
