@@ -131,9 +131,8 @@ SMTP_BLOCKING_PROVIDERS = {
     "icloud.com", "me.com", "mac.com",
     "aol.com", "protonmail.com", "proton.me",
     "zoho.com", "mail.com", "gmx.com", "gmx.de",
-    "yandex.com", "yandex.ru", "mail.ru",
-    "comcast.net", "verizon.net", "att.net", "sbcglobal.net", "bellsouth.net",
-    "cox.net", "charter.net", "earthlink.net", "juno.com", "netzero.com"
+    "yandex.com", "yandex.ru", "mail.ru"
+    # Removed ISP domains to attempt SMTP verification on them
 }
 
 # Free email providers (legitimate but free)
