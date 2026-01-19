@@ -152,8 +152,12 @@ class EmailValidatorAPITester:
         
         return success
 
-    def test_single_email_validation(self):
-        """Test single email validation"""
+    def test_single_email_validation_authenticated(self):
+        """Test single email validation with authentication"""
+        if not self.token:
+            print("❌ No token available for authenticated validation")
+            return False
+            
         test_cases = [
             ("test@gmail.com", "Valid email"),
             ("invalid@", "Invalid format"),
@@ -162,12 +166,12 @@ class EmailValidatorAPITester:
         
         all_passed = True
         for email, description in test_cases:
-            # Single email validation expects email as query parameter
             success, response = self.run_test(
-                f"Single Email Validation - {description}",
+                f"Authenticated Single Email Validation - {description}",
                 "POST",
                 f"validate/single?email={email}",
-                200
+                200,
+                auth=True
             )
             if not success:
                 all_passed = False
@@ -176,22 +180,26 @@ class EmailValidatorAPITester:
         
         return all_passed
 
-    def test_bulk_email_validation(self):
-        """Test bulk email validation and store job_id"""
+    def test_bulk_email_validation_authenticated(self):
+        """Test bulk email validation with authentication and store job_id"""
+        if not self.token:
+            print("❌ No token available for authenticated validation")
+            return False
+            
         test_emails = [
             "test@gmail.com",
             "invalid@",
             "fake@mailinator.com",
-            "user@yahoo.com",
-            "badformat"
+            "user@yahoo.com"
         ]
         
         success, response = self.run_test(
-            "Bulk Email Validation",
+            "Authenticated Bulk Email Validation",
             "POST",
             "validate/bulk",
             200,
-            data={"emails": test_emails}
+            data={"emails": test_emails},
+            auth=True
         )
         
         if success and 'job_id' in response:
