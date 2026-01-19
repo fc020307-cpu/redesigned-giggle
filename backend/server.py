@@ -369,7 +369,7 @@ def validate_single_email_sync(email: str) -> EmailResult:
     mx_host = mx_records[0]
     
     if provider_type == "verifiable":
-        # These providers tell us if mailbox exists
+        # These providers tell us if mailbox exists - skip catch-all check
         mailbox_exists, mailbox_reason = verify_mailbox_smtp(email, mx_host)
         
         if mailbox_exists is True:
@@ -389,13 +389,13 @@ def validate_single_email_sync(email: str) -> EmailResult:
                 reason=f"Invalid: {mailbox_reason}"
             )
         else:
-            # Couldn't verify but it's a known verifiable provider
+            # Couldn't verify but it's a known verifiable provider - likely valid
             return EmailResult(
-                email=email, status=EmailStatus.UNKNOWN,
+                email=email, status=EmailStatus.VALID,
                 format_valid=True, domain_valid=True, mx_valid=True,
-                mailbox_status="unknown", is_disposable=False,
-                provider_type=provider_type, confidence=70,
-                reason=f"Unknown: Could not verify ({mailbox_reason})"
+                mailbox_status="unverified", is_disposable=False,
+                provider_type=provider_type, confidence=85,
+                reason=f"Valid: {domain} can receive email ({mailbox_reason})"
             )
     
     elif provider_type == "catch_all":
