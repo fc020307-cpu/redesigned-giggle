@@ -10,6 +10,8 @@ class EmailValidatorAPITester:
         self.tests_run = 0
         self.tests_passed = 0
         self.job_id = None
+        self.token = None
+        self.user_data = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, files=None):
         """Run a single API test"""
