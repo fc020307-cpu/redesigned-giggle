@@ -13,10 +13,14 @@ class EmailValidatorAPITester:
         self.token = None
         self.user_data = None
 
-    def run_test(self, name, method, endpoint, expected_status, data=None, files=None):
+    def run_test(self, name, method, endpoint, expected_status, data=None, files=None, auth=False):
         """Run a single API test"""
         url = f"{self.base_url}/{endpoint}"
         headers = {'Content-Type': 'application/json'} if not files else {}
+        
+        # Add auth header if needed
+        if auth and self.token:
+            headers['Authorization'] = f'Bearer {self.token}'
 
         self.tests_run += 1
         print(f"\n🔍 Testing {name}...")
@@ -27,7 +31,10 @@ class EmailValidatorAPITester:
                 response = requests.get(url, headers=headers)
             elif method == 'POST':
                 if files:
-                    response = requests.post(url, files=files)
+                    # Remove Content-Type for file uploads
+                    if 'Content-Type' in headers:
+                        del headers['Content-Type']
+                    response = requests.post(url, files=files, headers=headers)
                 else:
                     response = requests.post(url, json=data, headers=headers)
 
