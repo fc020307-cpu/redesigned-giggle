@@ -97,7 +97,7 @@ class EmailValidatorAPITester:
             return False
             
         login_data = {
-            "email": "newuser@test.com",
+            "email": self.user_data['email'],  # Use the registered user's email
             "password": "test123"
         }
         
