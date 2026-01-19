@@ -1,52 +1,64 @@
-# VerifyMail - Bulk Email Validator
+# VerifyMail - Bulk Email Validator SaaS
 
 ## Original Problem Statement
-Build a bulk email validator software that can separate emails that are still active from junk. Advanced validation including format validation, domain check, MX record lookup, disposable email detection, and SMTP verification.
+Build a bulk email validator software that can separate active emails from junk. User wants to monetize it with pricing tiers and Stripe payments.
 
 ## User Personas
-- **Marketers**: Need to clean email lists before campaigns
-- **Sales Teams**: Want to verify prospect emails before outreach
-- **Businesses**: Need to maintain clean customer databases
+- **Marketers**: Clean email lists before campaigns
+- **Sales Teams**: Verify prospect emails  
+- **Businesses**: Maintain clean customer databases
+- **Developers**: API access for integrations
 
-## Core Requirements (Static)
-1. Bulk email validation (paste or CSV upload)
-2. Multi-layer validation:
-   - Format validation (regex)
-   - Domain verification
-   - MX record lookup
-   - Disposable email detection
-   - SMTP verification
-3. Results categorization (Valid, Invalid, Risky, Unknown)
-4. Export functionality (CSV)
-5. Real-time progress tracking
+## Core Features Implemented (January 2025)
+
+### Email Validation
+- [x] Format validation (100% accurate)
+- [x] Domain verification (DNS check)
+- [x] MX record lookup
+- [x] SMTP mailbox verification (Gmail, iCloud, Proton)
+- [x] Catch-all detection
+- [x] Disposable email detection (100+ domains)
+- [x] Confidence scoring
+
+### User System
+- [x] User registration with email/password
+- [x] JWT authentication
+- [x] User dashboard with usage tracking
+- [x] Protected routes
+
+### Monetization
+- [x] 3-tier pricing (Free, Basic $5, Pro $15)
+- [x] Stripe payment integration
+- [x] Usage limits per plan
+- [x] Billing cycle tracking
+
+### Export & Reporting
+- [x] CSV export (all, valid, invalid, risky)
+- [x] Validation history
+- [x] Real-time progress tracking
 
 ## Architecture
-- **Backend**: FastAPI with background task processing
-- **Frontend**: React with Shadcn UI components
-- **Database**: MongoDB for job storage
-- **Styling**: Tailwind CSS with Swiss/High-Contrast design
+- **Backend**: FastAPI + MongoDB
+- **Frontend**: React + Shadcn UI
+- **Payments**: Stripe via emergentintegrations
+- **Auth**: JWT with bcrypt
 
-## What's Been Implemented (December 2025)
-- [x] Landing page with paste/upload tabs
-- [x] Bulk email validation API
-- [x] CSV file upload support
-- [x] Background job processing
-- [x] Results dashboard with status cards
-- [x] Tab-based filtering
-- [x] Export to CSV (all, valid, invalid, risky)
-- [x] Real-time progress tracking
-- [x] Responsive design
+## Pricing Plans
+| Plan | Price | Verifications/month |
+|------|-------|---------------------|
+| Free | $0 | 50 |
+| Basic | $5 | 1,000 |
+| Pro | $15 | 5,000 |
 
 ## Prioritized Backlog
-### P0 (Critical)
-- All core features implemented ✅
 
 ### P1 (Important)
-- Email validation history/logs
-- API authentication for external access
-- Rate limiting
+- Subscription renewal handling
+- Usage reset on billing cycle
+- Email notifications
 
 ### P2 (Nice to Have)
-- Webhook notifications on completion
-- Batch scheduling
-- Email deliverability score
+- API key generation for Pro users
+- Webhook notifications
+- Team accounts
+- Desktop/mobile app versions
