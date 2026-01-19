@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # Providers where we CAN verify if username/mailbox exists (SMTP returns 550 for non-existent)
 VERIFIABLE_PROVIDERS = {
-    "gmail.com", "googlemail.com",  # Google
+    "gmail.com", "googlemail.com", "google.com",  # Google
     "icloud.com", "me.com", "mac.com",  # Apple
     "protonmail.com", "proton.me", "pm.me",  # Proton
     "zoho.com", "zohomail.com",  # Zoho
